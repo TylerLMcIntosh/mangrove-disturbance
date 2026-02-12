@@ -1,0 +1,271 @@
+---
+title: "Mangrove disturbance DyDiD"
+author: "Tyler L. McIntosh"
+date: last-modified
+format:
+  html:
+    embed-resources: true
+    html-math-method: katex
+    css: styles.css
+    toc: true
+    toc-depth: 1
+    toc-title: Contents
+    toc-location: right
+    code-fold: true
+    code-summary: "Show the code"
+---
+
+
+# Setup
+
+```{r setup-chunk, message = FALSE, warning = FALSE}
+
+if(!requireNamespace("here", quietly = TRUE)) {
+  install.packages("here")
+}
+library(here)
+
+source(here::here("code", "functions.R"))
+
+install_and_load_packages(c("glue",
+                            "tidyverse",
+                            "sf",
+                            "ggspatial",
+                            "prettymapr",
+                            "scico",
+                            "arrow"))
+
+dir_raw <- here::here("data", "raw")
+dir_derived <- here::here("data", "derived")
+dir_figs <- here::here("figs")
+dir_ensure(c(dir_raw,
+           dir_derived,
+           dir_figs))
+
+
+```
+
+# Load dats and create mini set for building
+
+```{r}
+
+set.seed(seed = 1234)
+dats_lazy <- arrow::open_dataset(here(dir_raw, "drought_and_TC/hazard_counts_hydrogeom_all_parts.parquet"))
+dats_mini <- dats_lazy |>
+  dplyr::slice_sample(n = 5000000) |>
+  collect()
+
+#glimpse(dats_mini)
+# unique(dats_mini$post)
+
+```
+
+# Map the data
+
+```{r}
+
+
+
+set.seed(seed = 1234)
+dats_lazy <- arrow::open_dataset(here(dir_raw, "drought_and_TC/hazard_counts_hydrogeom_all_parts.parquet"))
+dats_mini <- dats_lazy |>
+  dplyr::slice_sample(n = 5000000) |>
+  collect()
+
+#glimpse(dats_mini)
+# unique(dats_mini$post)
+
+
+dats_mini <- dats_mini |>
+  separate(
+    xy,
+    into = c("lon", "lat"),
+    sep = "_",
+    convert = TRUE
+  ) |>
+  st_as_sf(coords = c("lon", "lat"), crs = 4326)
+
+bb <- st_bbox(dats_mini)
+
+
+d_by_year <- ggplot(data = dats_mini) +
+  annotation_map_tile(type = "cartolight", zoom = 5) +
+  geom_sf(aes(color = drought_c), size = 0.2, alpha = 0.8) +
+  scale_color_scico(palette = "hawaii", direction = -1) +
+  facet_wrap(~year, ncol = 5) +
+  coord_sf(
+      xlim = c(bb["xmin"], bb["xmax"]),
+      ylim = c(bb["ymin"], bb["ymax"]),
+      crs = st_crs(4326),
+      expand = FALSE
+  ) +
+  theme_minimal() +
+  labs(title = "Drought over time, 5 million samples")
+
+ggsave(filename = here(dir_figs, "drought_by_year.png"),
+       plot = d_by_year,
+       units = "px",
+       width = 8000,
+       height = 8000)
+
+
+
+dr_by_year <- ggplot(data = dats_mini) +
+  annotation_map_tile(type = "cartolight", zoom = 5) +
+  geom_sf(aes(color = drought_rc5), size = 0.2, alpha = 0.8) +
+  scale_color_scico(palette = "hawaii", direction = -1) +
+  facet_wrap(~year, ncol = 5) +
+  coord_sf(
+      xlim = c(bb["xmin"], bb["xmax"]),
+      ylim = c(bb["ymin"], bb["ymax"]),
+      crs = st_crs(4326),
+      expand = FALSE
+  ) +
+  theme_minimal() +
+  labs(title = "Rolling drought over time, 5 million samples")
+
+ggsave(filename = here(dir_figs, "rolling_drought_by_year.png"),
+       plot = dr_by_year,
+       units = "px",
+       width = 8000,
+       height = 8000)
+
+
+```
+
+
+
+# CHECK MULTIPLE RANDOM SAMPLES: WHY ARE WE MISSING AREAS?
+
+```{r}
+
+
+# # Northern
+# 2005 - TC but no drought
+# 
+# 2016 - end of drought
+# 
+# # Southern
+# 2008 - TC but no drought
+# 
+# 2009-2013 drought
+# 2013 - emissions
+
+
+seeds <- c(1234, 2345, 3456, 4567)
+
+for(seed in seeds) {
+  
+  set.seed(seed = 1234)
+  dats_lazy <- arrow::open_dataset(here(dir_raw, "drought_and_TC/hazard_counts_hydrogeom_all_parts.parquet"))
+  dats_mini <- dats_lazy |>
+    dplyr::slice_sample(n = 5000000) |>
+    collect()
+  
+  #glimpse(dats_mini)
+  # unique(dats_mini$post)
+  
+  
+  dats_mini <- dats_mini |>
+    separate(
+      xy,
+      into = c("lon", "lat"),
+      sep = "_",
+      convert = TRUE
+    ) |>
+    st_as_sf(coords = c("lon", "lat"), crs = 4326)
+  
+  bb <- st_bbox(dats_mini)
+  
+  
+  d_by_year <- ggplot(data = dats_mini) +
+    annotation_map_tile(type = "cartolight", zoom = 5) +
+    geom_sf(aes(color = drought_c), size = 0.2, alpha = 0.8) +
+    scale_color_scico(palette = "hawaii", direction = -1) +
+    facet_wrap(~year, ncol = 5) +
+    coord_sf(
+        xlim = c(bb["xmin"], bb["xmax"]),
+        ylim = c(bb["ymin"], bb["ymax"]),
+        crs = st_crs(4326),
+        expand = FALSE
+    ) +
+    theme_minimal() +
+    labs(title = "Drought over time, 5 million samples")
+  
+  ggsave(filename = here(dir_figs, glue::glue("drought_by_year{seed}.png")),
+         plot = d_by_year,
+         units = "px",
+         width = 8000,
+         height = 8000)
+  
+  
+  
+  dr_by_year <- ggplot(data = dats_mini) +
+    annotation_map_tile(type = "cartolight", zoom = 5) +
+    geom_sf(aes(color = drought_rc5), size = 0.2, alpha = 0.8) +
+    scale_color_scico(palette = "hawaii", direction = -1) +
+    facet_wrap(~year, ncol = 5) +
+    coord_sf(
+        xlim = c(bb["xmin"], bb["xmax"]),
+        ylim = c(bb["ymin"], bb["ymax"]),
+        crs = st_crs(4326),
+        expand = FALSE
+    ) +
+    theme_minimal() +
+    labs(title = "Rolling drought over time, 5 million samples")
+  
+  ggsave(filename = here(dir_figs, glue::glue("rolling_drought_by_year{seed}.png")),
+         plot = dr_by_year,
+         units = "px",
+         width = 8000,
+         height = 8000)
+}
+
+
+
+```
+
+
+# Set cohorts for DyDiD
+
+```{r}
+
+dats_mini <- dats_mini |>
+   mutate(id = dense_rank(xy))
+dats_mini_did <- get.cohort(dats_mini, D = "treated",               ###############DECIDE ON TRT
+                                 index = c("id", "year"),
+                                 start0 = TRUE)
+dats_mini_did[which(is.na(dats_mini_did$FirstTreat)),"FirstTreat"] <- 1000 
+
+
+```
+
+
+# Run DyDID
+```{r}
+
+
+
+
+
+```
+
+
+
+
+
+<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+
+Click to show R Session Information
+
+</button>
+
+:::: {#collapseOne .accordion-collapse .collapse}
+<div>
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+</div>
+::::
