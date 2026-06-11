@@ -127,17 +127,18 @@ create_plot <- function(model, version) {
       color = "Group",
       fill = "Group",
       title = version,
-      caption = "cd_d_tc = at least one year of drought in 5 years before cyclone"
+      caption = "cd_d1_tc = at least one year of drought in 3 years before cyclone\ncd_d2p_tc = two or more years of drought in 3 years before cyclone\ncd_tc = zero years of drought pre-cyclone"
     ) +
+    #scale_color_manual(values = cd_group_colors) +
     theme_minimal() +
     theme(legend.position = "bottom") +
-    xlim(-15, 10)
+    xlim(-10, 15)
   
   return(p1)  
   
 }
 
-p1 <- create_plot(aggnew_cd_event_dummy$feols_structure, version = "Tropical cyclone impact on TEC_FLUX_V2")
+p1 <- create_plot(aggnew_cd_event_dummy$feols_structure, version = "Tropical cyclone impact on TEC_FLUX_V2 (1/100th of sub-sample)")
 
 
 ggsave(filename = here(dir_figs, "test_plot_1perc.png"),
