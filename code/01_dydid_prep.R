@@ -388,6 +388,7 @@ dats[, drought_rc4 := frollsum(drought_c, n = 4, align = "right", fill = NA), by
 
 dats <- dats[!is.na(drought_rc4)] # filter out data without rc3
 
+
 # ── TC and drought counts ─────────────────────────────────────────────────────
 tc_counts <- dats[, .(n_tc = sum(TC_c)), by = xy]
 
@@ -409,6 +410,7 @@ hist(d_counts$n_d)
 no_multi_tc <- tc_counts[n_tc <= 1, .(xy)]
 
 dats_filtered <- dats[xy %in% no_multi_tc$xy]
+
 
 # ── Build short-form data ─────────────────────────────────────────────────────
 xy_single_tc <- tc_counts[n_tc == 1, unique(xy)]
@@ -581,6 +583,15 @@ get_cohort_dt <- function(dt, D, index) {
   dt[]
 }
 
+arrow::write_parquet(
+  dats_filtered,
+  sink = here::here(
+    dir_derived,
+    "test5.parquet"
+  ),
+  compression = "snappy"
+)
+
 
 dats_filtered_did <- data.table::as.data.table(dats_filtered) |>
   merge(
@@ -623,9 +634,21 @@ dats_filtered_did[
 
 dir_long <- dir_ensure(here::here(dir_derived, "parquet_long"))
 
-arrow::write_parquet(dats_filtered_did, sink = here::here(dir_long, "did_ready_every_third_subsample.parquet"))
 
-dats_filtered_did <- dats_filtered_did |> select(-control_subset, -treated_subset)
+data.table::indices(dats_filtered_did)
+names(attributes(dats_filtered_did))
+object.size(attr(dats_filtered_did, "index"))
 
-x <- arrow::read_parquet(here::here(dir_long, "did_ready_every_third_subsample.parquet"))
+
+
+arrow::write_parquet(as.data.frame(dats_filtered_did),
+                     sink = here::here(dir_long, "did_ready_every_third_subsample.parquet"))
+
+message(
+  "Finished dats_filtered_did write: ",
+  round(file.size(here::here(dir_long, "did_ready_every_third_subsample.parquet")) / 1024^2, 1),
+  " MB"
+)
+
+
 
