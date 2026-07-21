@@ -32,6 +32,8 @@ cd_group_colors <- c(
   "control" = "#639922"
 )
 
+figs = FALSE
+
 
 set.seed(seed = 1234)
 
@@ -74,6 +76,17 @@ if(!file.exists(new_parquet_fl)) {
     dplyr::filter(xy %in% grid_ids) |>
     dplyr::collect() |>
     data.table::as.data.table()
+  
+  #add lat/long to data for conley vcov
+  dats[
+    ,
+    c("long", "lat") := tstrsplit(
+      xy,
+      "_",
+      fixed = TRUE,
+      type.convert = TRUE
+    )
+  ]
 
   arrow::write_parquet(dats, sink = new_parquet_fl)
 } else {
@@ -377,15 +390,17 @@ dats <- dats[!is.na(drought_rc4)] # filter out data without rc3
 
 # ── TC and drought counts ─────────────────────────────────────────────────────
 tc_counts <- dats[, .(n_tc = sum(TC_c)), by = xy]
-ggplot(tc_counts) +
-  geom_histogram(aes(x = n_tc)) +
-  labs(title = "Number of TCs at unit (>=2 removed)")
 
 tc_counts_counts <- tc_counts |>
   count(n_tc) |>
   mutate(perc_dats = n / sum(n) * 100)
 
-ggsave(filename = here(dir_figs, "n_tc.png"))
+if(figs) {
+  ggplot(tc_counts) +
+    geom_histogram(aes(x = n_tc)) +
+    labs(title = "Number of TCs at unit (>=2 removed)")
+  ggsave(filename = here(dir_figs, "n_tc.png"))
+}
 
 d_counts <- dats[, .(n_d = sum(drought_c)), by = xy]
 hist(d_counts$n_d)
@@ -453,44 +468,46 @@ for (i in seq_along(dummy_cols)) {
 #──────────────────────────────────────────────────────
 ## Summary stats and descriptive figs ----
 
+if(figs) {
+  tc_year_p <- ggplot(treated_sample) +
+    geom_bar(aes(x = year)) +
+    theme_minimal() +
+    labs(title ="Year of TC")
+  tc_year_p
+  ggsave(tc_year_p, filename = here(dir_figs, "year_of_tc.png"))
+  
+  
+  # Show drought years
+  d_tc_p <- ggplot(treated_sample) +
+    geom_bar(aes(x = drought_rc4)) +
+    theme_minimal() +
+    labs(title ="Drought years prior to TC (single-TC only)")
+  d_tc_p
+  ggsave(d_tc_p, filename = here(dir_figs, "n_d_prior_to_tc.png"))
+  
+  grouping_summary |> filter(cd_group == "tc") |> pull(n) / sum(grouping_summary |> filter(cd_group == "tc" | cd_group == "d_tc") |> pull(n))
+  
+  prop <- ggplot(grouping_summary) +
+    geom_bar(aes(x = "", y = n, fill = cd_group), stat = "identity", width = 1) +
+    coord_polar("y", start = 0) +
+    theme_void() +
+    scale_fill_manual(values = cd_group_colors) +
+    labs(title = "Proportions of final dataset")
+  
+  ggsave(prop, filename = here(dir_figs, "proportions_fig.png"))
+  
+  
+  group_by_year <- ggplot(dats_filtered_short |> filter(cd_group != "control")) +
+    geom_bar(aes(x = year, fill = cd_group)) +
+    scale_fill_manual(values =cd_group_colors) +
+    theme_minimal() +
+    labs(title ="Year of TC, split by treatment type")
+  group_by_year
+  ggsave(group_by_year, filename = here(dir_figs, "year_of_tc_by_trt.png"))
+  
+}
 
-tc_year_p <- ggplot(treated_sample) +
-  geom_bar(aes(x = year)) +
-  theme_minimal() +
-  labs(title ="Year of TC")
-tc_year_p
-ggsave(tc_year_p, filename = here(dir_figs, "year_of_tc.png"))
 
-
-# Show drought years
-d_tc_p <- ggplot(treated_sample) +
-  geom_bar(aes(x = drought_rc4)) +
-  theme_minimal() +
-  labs(title ="Drought years prior to TC (single-TC only)")
-d_tc_p
-ggsave(d_tc_p, filename = here(dir_figs, "n_d_prior_to_tc.png"))
-
-
-
-grouping_summary |> filter(cd_group == "tc") |> pull(n) / sum(grouping_summary |> filter(cd_group == "tc" | cd_group == "d_tc") |> pull(n))
-
-prop <- ggplot(grouping_summary) +
-  geom_bar(aes(x = "", y = n, fill = cd_group), stat = "identity", width = 1) +
-  coord_polar("y", start = 0) +
-  theme_void() +
-  scale_fill_manual(values = cd_group_colors) +
-  labs(title = "Proportions of final dataset")
-
-ggsave(prop, filename = here(dir_figs, "proportions_fig.png"))
-
-
-group_by_year <- ggplot(dats_filtered_short |> filter(cd_group != "control")) +
-  geom_bar(aes(x = year, fill = cd_group)) +
-  scale_fill_manual(values =cd_group_colors) +
-  theme_minimal() +
-  labs(title ="Year of TC, split by treatment type")
-group_by_year
-ggsave(group_by_year, filename = here(dir_figs, "year_of_tc_by_trt.png"))
 
 
 
@@ -508,31 +525,33 @@ bb <- c(
 # convert to sf only after parsing — avoids doing it on the full dataset
 pts_sf <- sf::st_as_sf(dats_filtered_short, coords = c("lon", "lat"), crs = 4326)
 
-d_map <- ggplot() +
-  ggspatial::annotation_map_tile(type = "cartolight", zoom = 5) +
-  ggspatial::layer_spatial(
-    data = pts_sf,
-    mapping = aes(color = cd_group),
-    size = 0.2,
-    alpha = 0.6
-  ) +
-  scale_color_manual(values = cd_group_colors) +
-  coord_sf(
-    xlim = c(bb["xmin"], bb["xmax"]),
-    ylim = c(bb["ymin"], bb["ymax"]),
-    crs = sf::st_crs(4326),
-    expand = FALSE
-  ) +
-  theme_minimal() +
-  labs(title = "Drought group distribution", color = "cd_group")
-
-ggsave(
-  filename = here::here(dir_figs, "drought_cd_group.png"),
-  plot     = d_map,
-  units    = "px",
-  width    = 6000,
-  height   = 4000
-)
+if(figs) {
+  d_map <- ggplot() +
+    ggspatial::annotation_map_tile(type = "cartolight", zoom = 5) +
+    ggspatial::layer_spatial(
+      data = pts_sf,
+      mapping = aes(color = cd_group),
+      size = 0.2,
+      alpha = 0.6
+    ) +
+    scale_color_manual(values = cd_group_colors) +
+    coord_sf(
+      xlim = c(bb["xmin"], bb["xmax"]),
+      ylim = c(bb["ymin"], bb["ymax"]),
+      crs = sf::st_crs(4326),
+      expand = FALSE
+    ) +
+    theme_minimal() +
+    labs(title = "Drought group distribution", color = "cd_group")
+  
+  ggsave(
+    filename = here::here(dir_figs, "drought_cd_group.png"),
+    plot     = d_map,
+    units    = "px",
+    width    = 6000,
+    height   = 4000
+  )
+}
 
 
 
@@ -581,17 +600,32 @@ dats_filtered_did[is.na(FirstTreat), FirstTreat := 1000]
 # set random control group set
 set.seed(seed)
 
-controls <- unique(dats_filtered_did |> filter(treated == 1) |> pull(xy))
-control_subsets <- tibble(controls, control_subset = sample(1:2, size = length(controls), replace = T)) |>
-  rename(xy = controls)
+control_subsets <- unique(
+  dats_filtered_did[treated == 0, .(xy)]
+)[
+  , control_subset := sample(rep(1:10, length.out = .N))
+]
 
-dats_filtered_did <- dats_filtered_did |>
-  left_join(control_subsets)
+treated_subsets <- unique(
+  dats_filtered_did[treated == 1, .(xy)]
+)[
+  , treated_subset := sample(rep(1:10, length.out = .N))
+]
 
-dir_long <- dir_ensure(here::here(dir_derived, "dir_long"))
+dats_filtered_did[
+  control_subsets,
+  on = "xy",
+  control_subset := i.control_subset
+]
+
+dats_filtered_did[
+  treated_subsets,
+  on = "xy",
+  treated_subset := i.treated_subset
+]
+
+dir_long <- dir_ensure(here::here(dir_derived, "parquet_long"))
 
 arrow::write_parquet(dats_filtered_did, sink = here::here(dir_long, "did_ready_every_third_subsample.parquet"))
-
-
 
 
