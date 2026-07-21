@@ -562,24 +562,21 @@ get_cohort_dt <- function(dt, D, index) {
   unit_var <- index[1]
   time_var <- index[2]
   
-  # compute first treated year per unit using explicit column references
-  cohort_dt <- dt[dt[[D]] == 1,
-                  .(FirstTreat = min(.SD[[time_var]], na.rm = TRUE)),
-                  by = unit_var,
-                  .SDcols = time_var]
+  cohort_dt <- dt[
+    get(D) == 1 & !is.na(get(time_var)),
+    .(FirstTreat = min(get(time_var))),
+    by = unit_var
+  ]
   
-  # join back
-  dt <- merge(dt, cohort_dt, by = unit_var, all.x = TRUE)
+  dt <- merge(
+    dt,
+    cohort_dt,
+    by = unit_var,
+    all.x = TRUE,
+    sort = FALSE
+  )
   
-  # controls get FirstTreat = Inf
-  dt[is.na(FirstTreat), FirstTreat := Inf]
-  
-  # relative time
-  dt[, rel_time := fifelse(
-    is.finite(FirstTreat),
-    .SD[[time_var]] - FirstTreat,
-    -Inf
-  ), .SDcols = time_var]
+  dt[, rel_time := get(time_var) - FirstTreat]
   
   dt[]
 }
@@ -598,7 +595,7 @@ dats_filtered_did <- get_cohort_dt(dats_filtered_did, D = "TC_c", index = c("xy"
 dats_filtered_did[is.na(FirstTreat), FirstTreat := 1000]
 
 # set random control group set
-set.seed(seed)
+set.seed(1234)
 
 control_subsets <- unique(
   dats_filtered_did[treated == 0, .(xy)]
@@ -628,4 +625,7 @@ dir_long <- dir_ensure(here::here(dir_derived, "parquet_long"))
 
 arrow::write_parquet(dats_filtered_did, sink = here::here(dir_long, "did_ready_every_third_subsample.parquet"))
 
+dats_filtered_did <- dats_filtered_did |> select(-control_subset, -treated_subset)
+
+x <- arrow::read_parquet(here::here(dir_long, "did_ready_every_third_subsample.parquet"))
 
