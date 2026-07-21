@@ -77,9 +77,76 @@ if(!file.exists(new_parquet_fl)) {
 
   arrow::write_parquet(dats, sink = new_parquet_fl)
 } else {
-  dats <- arrow::read_parquet(new_parquet_fl)
+  dats <- arrow::read_parquet(new_parquet_fl) |>
+    data.table::as.data.table()
 }
+
+
+# Check data distribution in comparison to Sarah's data
   
+
+
+parquet_files <- list.files(
+  here(dir_raw, "drought_and_TC"),
+  pattern    = "\\.parquet$",
+  full.names = TRUE
+)
+
+
+# # Check data in comparison to Sarah's
+#
+# data_check_new <- dats[year == 2002]
+#
+# data_check_full <- arrow::open_dataset(parquet_files, format = "parquet") |>
+#   dplyr::filter(year == 2002) |>
+#   dplyr::collect() |>
+#   data.table::as.data.table()
+# 
+# plot_dats <- function(dats, flnm) {
+#   
+#   dats <- data.table::copy(dats)
+#   
+#   dats[, c("lon", "lat") := tstrsplit(xy, "_", fixed = TRUE, type.convert = TRUE)]
+#   
+#   bb <- c(
+#     xmin = min(dats$lon),
+#     xmax = max(dats$lon),
+#     ymin = min(dats$lat),
+#     ymax = max(dats$lat)
+#   )
+#   
+#   pts_sf_check <- sf::st_as_sf(dats, coords = c("lon", "lat"), crs = 4326)
+#   
+#   
+#   hzg_map <- ggplot() +
+#     ggspatial::annotation_map_tile(type = "cartolight", zoom = 5) +
+#     ggspatial::layer_spatial(
+#       data = pts_sf_check,
+#       mapping = aes(color = haz_group),
+#       size = 0.2,
+#       alpha = 0.6
+#     ) +
+#     coord_sf(
+#       xlim = c(bb["xmin"], bb["xmax"]),
+#       ylim = c(bb["ymin"], bb["ymax"]),
+#       crs = sf::st_crs(4326),
+#       expand = FALSE
+#     ) +
+#     theme_minimal() +
+#     labs(title = flnm)
+#   
+#   ggsave(
+#     filename = here::here(dir_figs, flnm),
+#     plot     = hzg_map,
+#     units    = "px",
+#     width    = 6000,
+#     height   = 4000
+#   )
+#   
+# }
+# 
+# plot_dats(data_check_full, flnm = "haz_group_check_full_2002.png")
+# plot_dats(data_check_new, flnm = "haz_group_check_new_2002.png")
 
 
 
@@ -295,21 +362,30 @@ if(!file.exists(new_parquet_fl)) {
 
 
 
-# -- New 3-year rolling window -------------------------------------------------
+# -- New 4-year rolling window -------------------------------------------------
 
 setorder(dats, xy, year) # set order of rows for frollsum
 
-dats[, drought_rc3 := frollsum(drought_c, n = 3, align = "right", fill = NA), by = xy]
+dats[, drought_rc4 := frollsum(drought_c, n = 4, align = "right", fill = NA), by = xy]
 
-# frollsum at position t includes t itself, so shift forward by 1
-dats[, drought_rc3 := shift(drought_rc3, n = 1, type = "lag"), by = xy]
+# Do NOT shift by 1, maintain inclustion of T itself
+## frollsum at position t includes t itself, so shift forward by 1
+#dats[, drought_rc4 := shift(drought_rc4, n = 1, type = "lag"), by = xy]
 
 
-dats <- dats[!is.na(drought_rc3)] # filter out data without rc3
+dats <- dats[!is.na(drought_rc4)] # filter out data without rc3
 
 # ── TC and drought counts ─────────────────────────────────────────────────────
 tc_counts <- dats[, .(n_tc = sum(TC_c)), by = xy]
-hist(tc_counts$n_tc)
+ggplot(tc_counts) +
+  geom_histogram(aes(x = n_tc)) +
+  labs(title = "Number of TCs at unit (>=2 removed)")
+
+tc_counts_counts <- tc_counts |>
+  count(n_tc) |>
+  mutate(perc_dats = n / sum(n) * 100)
+
+ggsave(filename = here(dir_figs, "n_tc.png"))
 
 d_counts <- dats[, .(n_d = sum(drought_c)), by = xy]
 hist(d_counts$n_d)
@@ -335,10 +411,10 @@ treated_sample <- dats_filtered[TC_c == 1]
 dats_filtered_short <- data.table::rbindlist(list(
   dats_filtered[TC_c == 1],
   unique(dats_filtered[TC_c == 0 & !xy %in% xy_single_tc], by = "xy")
-))[, drought_years_pre_tc := drought_rc3]
+))[, drought_years_pre_tc := drought_rc4]
 
 unique(dats_filtered_short$drought_years_pre_tc)
-hist(dats_filtered_short$drought_years_pre_tc)
+
 
 # ── Group assignment ──────────────────────────────────────────────────────────
 dats_filtered_short[, cd_group := data.table::fcase(
@@ -388,7 +464,7 @@ ggsave(tc_year_p, filename = here(dir_figs, "year_of_tc.png"))
 
 # Show drought years
 d_tc_p <- ggplot(treated_sample) +
-  geom_bar(aes(x = drought_rc3)) +
+  geom_bar(aes(x = drought_rc4)) +
   theme_minimal() +
   labs(title ="Drought years prior to TC (single-TC only)")
 d_tc_p
@@ -502,7 +578,19 @@ dats_filtered_did <- get_cohort_dt(dats_filtered_did, D = "TC_c", index = c("xy"
 
 dats_filtered_did[is.na(FirstTreat), FirstTreat := 1000]
 
-arrow::write_parquet(dats_filtered_did, sink = here::here(dir_derived, "did_ready_every_third_subsample.parquet"))
+# set random control group set
+set.seed(seed)
+
+controls <- unique(dats_filtered_did |> filter(treated == 1) |> pull(xy))
+control_subsets <- tibble(controls, control_subset = sample(1:2, size = length(controls), replace = T)) |>
+  rename(xy = controls)
+
+dats_filtered_did <- dats_filtered_did |>
+  left_join(control_subsets)
+
+dir_long <- dir_ensure(here::here(dir_derived, "dir_long"))
+
+arrow::write_parquet(dats_filtered_did, sink = here::here(dir_long, "did_ready_every_third_subsample.parquet"))
 
 
 

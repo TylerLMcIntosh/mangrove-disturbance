@@ -37,7 +37,22 @@ cd_group_colors <- c(
 
 set.seed(seed = 1234)
 
-dats_filtered_did <- arrow::read_parquet(here::here(dir_derived, "did_ready_every_third_subsample.parquet"))
+
+# 19.8 million time-space points, 1,028,686; 2002-2022 (~20 years)
+dats_filtered_did <- arrow::read_parquet(here::here(dir_derived, "dir_long", "did_ready_every_third_subsample.parquet"))
+length(unique(dats_filtered_did$xy))
+
+glimpse(dats_filtered_did)
+
+ecor_counts <- dats_filtered_did |>
+  count(ECOREGION)
+
+typ_counts <- dats_filtered_did |>
+  count(typ)
+
+trt_counts <- dats_filtered_did |>
+  count(treated, FirstTreat)
+
 
 sample_xys <- sample(unique(dats_filtered_did$xy), 1/100 * nrow(dats_filtered_did))
 
