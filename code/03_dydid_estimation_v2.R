@@ -189,15 +189,31 @@ model_specs <- dplyr::bind_rows(
 
 vcov_specs <- tibble::tibble(
   vcov_id = c(
-    "conley_75km_5km"
+    "conley_150km_5km",
+    "conley_75km_2.5km",
+    "conley_75km_5km",
+    "conley_30km_1km",
+    "conley_10km_0.5km"
   ),
   vcov_label = c(
-    "Conley SEs: 75 km cutoff, 5 km pixel"
+    "Conley SEs: 150 km cutoff, 5 km pixel",
+    "Conley SEs: 75 km cutoff, 2.5 km pixel",
+    "Conley SEs: 75 km cutoff, 5 km pixel",
+    "Conley SEs: 30 km cutoff, 1 km pixel",
+    "Conley SEs: 10 km cutoff, 0.5 km pixel"
   ),
   vcov = list(
-    fixest::vcov_conley(lat = "lat", lon = "long", cutoff = 75, pixel = 5, distance = "triangular")
+    fixest::vcov_conley(lat = "lat", lon = "long", cutoff = 150, pixel = 5, distance = "triangular"),
+    fixest::vcov_conley(lat = "lat", lon = "long", cutoff = 75, pixel = 2.5, distance = "triangular"),
+    fixest::vcov_conley(lat = "lat", lon = "long", cutoff = 75, pixel = 5, distance = "triangular"),
+    fixest::vcov_conley(lat = "lat", lon = "long", cutoff = 30, pixel = 1, distance = "triangular"),
+    fixest::vcov_conley(lat = "lat", lon = "long", cutoff = 10, pixel = 0.5, distance = "triangular")
   ),
-  vcov_vars = list(c("lat", "long"))
+  vcov_vars = list(c("lat", "long"),
+                   c("lat", "long"),
+                   c("lat", "long"),
+                   c("lat", "long"),
+                   c("lat", "long"))
 )
 
 
@@ -255,7 +271,12 @@ preview <- preview_run_grid(typ_subset_specs,
                             vcov_specs,
                             agg_specs)
 
-
+preview <- preview_run_grid(all_subset_specs,
+                            outcome_specs,
+                            cd_specs,
+                            model_specs,
+                            vcov_specs,
+                            agg_specs)
 
 tic('sunab estimation')
 results_sunab_typ <- run_experiment(
@@ -277,6 +298,45 @@ results_sunab_typ <- run_experiment(
 toc()
 
 failed_typ <- purrr::keep(results_sunab_typ$run_results, \(r) !is.null(r$error))
+if (length(failed_typ) > 0) {
+  message("Failed estimation runs:")
+  purrr::walk(failed_typ, \(r) message("  ", r$run_id, ": ", r$error))
+}
+
+all_estimation_tables <- rebuild_estimation_tables(dir_out = dir_results, write_csv = TRUE)
+
+message(glue::glue(
+  "Coef rows:       {nrow(all_estimation_tables$coef_tbl)}\n",
+  "Agg specs found: {paste(names(all_estimation_tables$agg_tbls), collapse = ', ')}\n",
+  "Unique run_ids:  {dplyr::n_distinct(all_estimation_tables$run_registry$run_id)}"
+))
+
+#relativize_result_paths(dir_results = dir_results, base = here::here())
+
+
+
+
+
+tic('sunab estimation')
+results_sunab_all <- run_experiment(
+  dataset_spec          = dataset_spec,
+  analysis_subset_specs = all_subset_specs,
+  outcome_specs         = outcome_specs,
+  treatment_group_specs = cd_specs,
+  model_specs           = model_specs,
+  vcov_specs            = vcov_specs,
+  agg_specs             = agg_specs,
+  dir_out               = dir_results,
+  ci_level              = 0.95,
+  run_estimation        = TRUE,
+  run_descriptive       = FALSE,
+  skip_existing         = TRUE,
+  verbose_timing        = TRUE,
+  .progress             = TRUE
+)
+toc()
+
+failed_typ <- purrr::keep(results_sunab_all$run_results, \(r) !is.null(r$error))
 if (length(failed_typ) > 0) {
   message("Failed estimation runs:")
   purrr::walk(failed_typ, \(r) message("  ", r$run_id, ": ", r$error))

@@ -20,7 +20,7 @@ library(patchwork)
 source(here::here("code", "weight_dydid_pipeline_v7.R"))
 source(here("code", "functions.R"))
 
-version     <- "v1"
+version     <- "v2"
 dir_results <- here::here("results", version)
 dir_figs    <- here::here("figs",    version)
 
