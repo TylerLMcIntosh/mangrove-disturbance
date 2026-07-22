@@ -652,3 +652,24 @@ message(
 
 
 
+
+# get data subset sizes
+
+dats_filtered_did <- arrow::read_parquet(here::here("data/derived/parquet_long", "did_ready_every_third_subsample.parquet"))
+
+typ_counts <- dats_filtered_did |>
+  count(typ)
+
+typ_counts_filt <- dats_filtered_did |>
+  filter((treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 1:5)) |>
+  count(typ)
+
+
+typ_counts_filt_cd <- dats_filtered_did |>
+  filter((treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 1:5)) |>
+  count(typ, cd_group) |>
+  mutate(n_distinct_ids = n / 18)
+
+
+
+

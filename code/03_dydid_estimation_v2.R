@@ -4,7 +4,7 @@ rm(list = ls())
 
 if (!requireNamespace("here", quietly = TRUE)) install.packages("here")
 library(here)
-here::i_am("code/03_dydid_estimation.R")
+here::i_am("code/03_dydid_estimation_v2.R")
 
 required_pkgs <- c(
   "dplyr", "ggplot2", "tidyr", "readr", "purrr", "tibble", "stringr",
@@ -27,8 +27,6 @@ set.seed(seed)
 
 # Set number of cores to use in FEOLS call
 fixest::setFixest_nthreads(48)
-#fixest::getFixest_nthreads()
-ram_size <- 1000 # either 250 or 1000
 
 # log any unhandled errors to the status file before R exits
 options(error = function() {
@@ -40,7 +38,7 @@ options(error = function() {
 
 # ── Directory layout ──────────────────────────────────────────────────────────
 
-version <- "v1"
+version <- "v2"
 
 dir_data    <- here::here("data", "derived")
 
@@ -70,33 +68,21 @@ dataset_spec <- make_dataset_spec(
 # 3. Analysis subset specs ----
 # ══════════════════════════════════════════════════════════════════════════════
 
-typ_subset_specs_control_50_1 <- expand_analysis_subset_specs_by_col(
+typ_subset_specs <- expand_analysis_subset_specs_by_col(
   long_data_source  = dir_long,
   split_col         = "typ",
   id_prefix         = "typc1",
-  check_all_files   = TRUE,
-  base_filter       = ~ (treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 1:5)
+  check_all_files   = TRUE#,
+  #base_filter       = ~ (treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 1:5)
 )
 
-typ_subset_specs_control_50_2 <- expand_analysis_subset_specs_by_col(
-  long_data_source  = dir_long,
-  split_col         = "typ",
-  id_prefix         = "typc2",
-  check_all_files   = TRUE,
-  base_filter       = ~ (treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 6:10)
-)
 
-all_subset_specs_control_50_1 <- make_analysis_subset_spec(
+all_subset_specs <- make_analysis_subset_spec(
   subset_id = "alldatac1",
-  long_data_source = dir_long,
-  data_filter = ~ (treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 1:5)
+  long_data_source = dir_long#,
+  #data_filter = ~ (treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 1:5)
 )
 
-all_subset_specs_control_50_2 <- make_analysis_subset_spec(
-  subset_id = "alldatac2",
-  long_data_source = dir_long,
-  data_filter = ~ (treated == 1 & treated_subset %in% 1:10) | (treated == 0 & control_subset %in% 6:10)
-)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -262,7 +248,7 @@ preview_run_grid <- function(subset_specs, outcome_specs, treatment_group_specs,
 
 
 
-preview <- preview_run_grid(typ_subset_specs_control_50_1,
+preview <- preview_run_grid(typ_subset_specs,
                             outcome_specs,
                             cd_specs,
                             model_specs,
@@ -274,7 +260,7 @@ preview <- preview_run_grid(typ_subset_specs_control_50_1,
 tic('sunab estimation')
 results_sunab_typ <- run_experiment(
   dataset_spec          = dataset_spec,
-  analysis_subset_specs = typ_subset_specs_control_50_1,
+  analysis_subset_specs = typ_subset_specs,
   outcome_specs         = outcome_specs,
   treatment_group_specs = cd_specs,
   model_specs           = model_specs,
